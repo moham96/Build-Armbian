@@ -1,0 +1,19 @@
+--- ./scripts/package/builddeb
++++ ./scripts/package/builddeb
+@@ -119,11 +119,11 @@
+ libc_headers_dir="$objtree/debian/headertmp"
+ dtb_dir="$objtree/debian/dtbtmp"
+ dbg_dir="$objtree/debian/dbgtmp"
+-packagename=linux-image"$LOCAL_VERSION"
+-fwpackagename=linux-firmware-image"$LOCAL_VERSION"
+-kernel_headers_packagename=linux-headers"$LOCAL_VERSION"
+-dtb_packagename=linux-dtb"$LOCAL_VERSION"
+-libc_headers_packagename=linux-libc-dev"$LOCAL_VERSION"
++packagename=linux-image-dev"$LOCAL_VERSION"
++fwpackagename=linux-firmware-image-dev"$LOCAL_VERSION"
++kernel_headers_packagename=linux-headers-dev"$LOCAL_VERSION"
++dtb_packagename=linux-dtb-dev"$LOCAL_VERSION"
++libc_headers_packagename=linux-libc-dev-dev"$LOCAL_VERSION"
+ dbg_packagename=$packagename-dbg
+ debarch=
+ forcearch=
