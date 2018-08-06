@@ -4,3 +4,4 @@
 
 /dev/root	/		ext4		defaults,noatime,errors=remount-ro	0 1
 tmpfs		/tmp		tmpfs		defaults,nosuid				0 0
+/dev/mmcblk1p1	/boot		vfat		defaults				0 2
