@@ -133,12 +133,11 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 
 PACKAGE_LIST_OFFICE="lxtask mirage galculator hexchat mpv \
 	gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf libgtk2.0-bin libgnome2-perl \
-	network-manager-gnome network-manager-openvpn-gnome gnome-keyring gcr libgck-1-0 p11-kit \
 	libpam-gnome-keyring thunderbird system-config-printer-common \
 	bluetooth bluez bluez-tools blueman geany atril xarchiver leafpad \
 	libreoffice-writer libreoffice-style-tango libreoffice-gtk fbi cups-pk-helper cups"
 
-PACKAGE_LIST_PL="pasystray paman pavucontrol pulseaudio pavumeter pulseaudio-module-gconf pulseaudio-module-bluetooth gnome-orca paprefs"
+PACKAGE_LIST_PL="pasystray paman pavucontrol pulseaudio pavumeter pulseaudio-module-gconf pulseaudio-module-bluetooth  paprefs"
 
 #case $DISPLAY_MANAGER in
 #	nodm)
@@ -165,7 +164,7 @@ case $BUILD_DESKTOP_DE in
 	;;
 	mate)
 	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP $PACKAGE_LIST_OFFICE"
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mate-desktop-environment-extras mate-media mate-screensaver mate-utils mate-power-manager mate-applets mozo tango-icon-theme"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mate-desktop-environment-extras mate-media mate-screensaver mate-utils mate-power-manager mate-applets mozo tango-icon-theme gnome-orca"
 	;;
 esac
 
