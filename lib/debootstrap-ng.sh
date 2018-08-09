@@ -98,7 +98,7 @@ create_rootfs_cache()
 	local packages_hash=$(get_package_list_hash)
 	local cache_fname=$SRC/cache/rootfs/${RELEASE}-ng-$ARCH.$packages_hash.tar.lz4
 	local display_name=${RELEASE}-ng-$ARCH.${packages_hash:0:3}...${packages_hash:29}.tar.lz4
-	if [[ -f $cache_fname ]]; then
+	if [[ -f $cache_fname && "$ROOT_FS_CREATE_ONLY" != "force" ]]; then
 		local date_diff=$(( ($(date +%s) - $(stat -c %Y $cache_fname)) / 86400 ))
 		display_alert "Extracting $display_name" "$date_diff days old" "info"
 		pv -p -b -r -c -N "$display_name" "$cache_fname" | lz4 -dc | tar xp --xattrs -C $SDCARD/
@@ -118,7 +118,7 @@ create_rootfs_cache()
 		[[ -z $OUTPUT_DIALOG ]] && local apt_extra_progress="--show-progress -o DPKG::Progress-Fancy=1"
 
 		display_alert "Installing base system" "Stage 1/2" "info"
-		eval 'debootstrap --include=locales,gnupg,ifupdown ${PACKAGE_LIST_EXCLUDE:+ --exclude=${PACKAGE_LIST_EXCLUDE// /,}} \
+		eval 'debootstrap --include=${DEBOOTSTRAP_LIST} ${PACKAGE_LIST_EXCLUDE:+ --exclude=${PACKAGE_LIST_EXCLUDE// /,}} \
 			--arch=$ARCH --foreign $RELEASE $SDCARD/ $apt_mirror' \
 			${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/debootstrap.log'} \
 			${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Debootstrap (stage 1/2)..." $TTY_Y $TTY_X'} \
@@ -183,6 +183,9 @@ create_rootfs_cache()
 		# add armhf arhitecture to arm64
 		[[ $ARCH == arm64 ]] && eval 'LC_ALL=C LANG=C chroot $SDCARD /bin/bash -c "dpkg --add-architecture armhf"'
 
+		# this should fix resolvconf installation failure in some cases
+		chroot $SDCARD /bin/bash -c 'echo "resolvconf resolvconf/linkify-resolvconf boolean false" | debconf-set-selections'
+
 		# stage: update packages list
 		display_alert "Updating package list" "$RELEASE" "info"
 		eval 'LC_ALL=C LANG=C chroot $SDCARD /bin/bash -c "apt-get -q -y $apt_extra update"' \
@@ -221,7 +224,7 @@ create_rootfs_cache()
 
 		# this is needed for the build process later since resolvconf generated file in /run is not saved
 		rm $SDCARD/etc/resolv.conf
-		echo 'nameserver 8.8.8.8' >> $SDCARD/etc/resolv.conf
+		echo 'nameserver 1.1.1.1' >> $SDCARD/etc/resolv.conf
 
 		# stage: make rootfs cache archive
 		display_alert "Ending debootstrap process and preparing cache" "$RELEASE" "info"
@@ -232,7 +235,23 @@ create_rootfs_cache()
 
 		tar cp --xattrs --directory=$SDCARD/ --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
 			--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $SDCARD/ | cut -f1) -N "$display_name" | lz4 -c > $cache_fname
+
+		# sign rootfs cache archive that it can be used for web cache once. Internal purposes
+		if [[ -n $GPG_PASS ]]; then
+			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --pinentry-mode loopback --batch --yes $cache_fname
+		fi
+
 	fi
+
+	# used for internal purposes. Faster rootfs cache rebuilding
+    if [[ -n "$ROOT_FS_CREATE_ONLY" ]]; then
+		[[ $use_tmpfs = yes ]] && umount $SDCARD
+		rm -rf $SDCARD
+		# remove exit trap
+		trap - INT TERM EXIT
+        exit
+	fi
+
 	mount_chroot "$SDCARD"
 } #############################################################################
 
@@ -265,7 +284,12 @@ prepare_partitions()
 	# parttype[nfs] is empty
 
 	# metadata_csum and 64bit may need to be disabled explicitly when migrating to newer supported host OS releases
-	mkopts[ext4]='-q -m 2'
+	# TODO: Disable metadata_csum only for older releases (jessie)?
+	if [[ $(lsb_release -sc) == bionic ]]; then
+		mkopts[ext4]='-q -m 2 -O ^64bit,^metadata_csum'
+	elif [[ $(lsb_release -sc) == xenial ]]; then
+		mkopts[ext4]='-q -m 2'
+	fi
 	mkopts[fat]='-n BOOT'
 	mkopts[ext2]='-q'
 	# mkopts[f2fs] is empty
@@ -329,13 +353,12 @@ prepare_partitions()
 				local sdsize=$(bc -l <<< "scale=0; (($imagesize * 0.8) / 4 + 1) * 4")
 				;;
 			*)
-				# Hardcoded overhead +40% and +128MB for ext4 is needed for desktop images,
-				# for CLI it could be lower. Also add extra 128 MiB for the emergency swap
-				# file creation and align the size up to 4MiB
+				# Hardcoded overhead +25% is needed for desktop images,
+				# for CLI it could be lower. Align the size up to 4MiB
 				if [[ $BUILD_DESKTOP == yes ]]; then
-					local sdsize=$(bc -l <<< "scale=0; ((($imagesize * 1.4) / 1 + 128) / 4 + 1) * 4")
+					local sdsize=$(bc -l <<< "scale=0; ((($imagesize * 1.25) / 1 + 0) / 4 + 1) * 4")
 				else
-					local sdsize=$(bc -l <<< "scale=0; ((($imagesize * 1.2) / 1 + 128) / 4 + 1) * 4")
+					local sdsize=$(bc -l <<< "scale=0; ((($imagesize * 1.20) / 1 + 0) / 4 + 1) * 4")
 				fi
 				;;
 		esac
@@ -409,11 +432,7 @@ prepare_partitions()
 
 	# stage: adjust boot script or boot environment
 	if [[ -f $SDCARD/boot/armbianEnv.txt ]]; then
-		if [[ $HAS_UUID_SUPPORT == yes ]]; then
-			echo "rootdev=$rootfs" >> $SDCARD/boot/armbianEnv.txt
-		elif [[ $rootpart != 1 ]]; then
-			echo "rootdev=/dev/mmcblk0p${rootpart}" >> $SDCARD/boot/armbianEnv.txt
-		fi
+		echo "rootdev=$rootfs" >> $SDCARD/boot/armbianEnv.txt
 		echo "rootfstype=$ROOTFS_TYPE" >> $SDCARD/boot/armbianEnv.txt
 	elif [[ $rootpart != 1 ]]; then
 		local bootscript_dst=${BOOTSCRIPT##*:}
@@ -425,7 +444,7 @@ prepare_partitions()
 	# if we have boot.ini = remove armbianEnv.txt and add UUID there if enabled
 	if [[ -f $SDCARD/boot/boot.ini ]]; then
 		sed -i -e "s/rootfstype \"ext4\"/rootfstype \"$ROOTFS_TYPE\"/" $SDCARD/boot/boot.ini
-		[[ $HAS_UUID_SUPPORT == yes ]] && sed -i 's/^setenv rootdev .*/setenv rootdev "'$rootfs'"/' $SDCARD/boot/boot.ini
+		sed -i 's/^setenv rootdev .*/setenv rootdev "'$rootfs'"/' $SDCARD/boot/boot.ini
 		[[ -f $SDCARD/boot/armbianEnv.txt ]] && rm $SDCARD/boot/armbianEnv.txt
 	fi
 
@@ -485,13 +504,13 @@ create_image()
 	if [[ $COMPRESS_OUTPUTIMAGE == yes && $BUILD_ALL != yes ]]; then
 		# compress image
 		cd $DESTIMG
-        	sha256sum -b ${version}.img > sha256sum.sha
-	        if [[ -n $GPG_PASS ]]; then
-        	        echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --batch --yes ${version}.img
-                	echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --batch --yes sha256sum.sha
-	        fi
+		sha256sum -b ${version}.img > sha256sum.sha
+		if [[ -n $GPG_PASS ]]; then
+			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --pinentry-mode loopback --batch --yes ${version}.img
+			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --pinentry-mode loopback --batch --yes sha256sum.sha
+		fi
 			display_alert "Compressing" "$DEST/images/${version}.img" "info"
-	        7za a -t7z -bd -m0=lzma2 -mx=3 -mfb=64 -md=32m -ms=on $DEST/images/${version}.7z ${version}.img armbian.txt *.asc sha256sum.sha >/dev/null 2>&1
+		7za a -t7z -bd -m0=lzma2 -mx=3 -mfb=64 -md=32m -ms=on $DEST/images/${version}.7z ${version}.img armbian.txt *.asc sha256sum.sha >/dev/null 2>&1
 	fi
 	#
 	if [[ $BUILD_ALL != yes ]]; then
@@ -502,5 +521,16 @@ create_image()
 
 	# call custom post build hook
 	[[ $(type -t post_build_image) == function ]] && post_build_image "$DEST/images/${version}.img"
+
+	# write image to SD card
+	if [[ -e "$CARD_DEVICE" && -f $DEST/images/${version}.img ]]; then
+		display_alert "Writing image" "$CARD_DEVICE" "info"
+		etcher $DEST/images/${version}.img -d $CARD_DEVICE -y
+		if [ $? -eq 0 ]; then
+			display_alert "Writing succeeded" "${version}.img" "info"
+			else
+			display_alert "Writing failed" "${version}.img" "err"
+		fi
+	fi
 
 } #############################################################################

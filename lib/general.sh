@@ -18,6 +18,7 @@
 # addtorepo
 # prepare_host
 # download_toolchain
+# download_etcher_cli
 
 # cleaning <target>
 #
@@ -37,6 +38,7 @@ cleaning()
 			# easier than dealing with variable expansion and escaping dashes in file names
 			find $DEST/debs -name "${CHOSEN_UBOOT}_*.deb" -delete
 			find $DEST/debs \( -name "${CHOSEN_KERNEL}_*.deb" -o \
+				-name "armbian-*.deb" -o \
 				-name "${CHOSEN_KERNEL/image/dtb}_*.deb" -o \
 				-name "${CHOSEN_KERNEL/image/headers}_*.deb" -o \
 				-name "${CHOSEN_KERNEL/image/source}_*.deb" -o \
@@ -357,26 +359,26 @@ addtorepo()
 		local forceoverwrite=""
 
 		# let's drop from publish if exits
-		if [[ -n $(aptly publish list -config=../config/aptly.conf -raw | awk '{print $(NF)}' | grep $release) ]]; then
-			aptly publish drop -config=../config/aptly.conf $release > /dev/null 2>&1
+		if [[ -n $(aptly publish list -config=${SCRIPTPATH}config/aptly.conf -raw | awk '{print $(NF)}' | grep $release) ]]; then
+			aptly publish drop -config=${SCRIPTPATH}config/aptly.conf $release > /dev/null 2>&1
 		fi
 
 		# create local repository if not exist
-		if [[ -z $(aptly repo list -config=../config/aptly.conf -raw | awk '{print $(NF)}' | grep $release) ]]; then
+		if [[ -z $(aptly repo list -config=${SCRIPTPATH}config/aptly.conf -raw | awk '{print $(NF)}' | grep $release) ]]; then
 			display_alert "Creating section" "$release" "info"
-			aptly repo create -config=../config/aptly.conf -distribution=$release -component="main" \
+			aptly repo create -config=${SCRIPTPATH}config/aptly.conf -distribution=$release -component="main" \
 			-comment="Armbian main repository" ${release}
 		fi
-		if [[ -z $(aptly repo list -config=../config/aptly.conf -raw | awk '{print $(NF)}' | grep "^utils") ]]; then
-			aptly repo create -config=../config/aptly.conf -distribution=$release -component="utils" \
+		if [[ -z $(aptly repo list -config=${SCRIPTPATH}config/aptly.conf -raw | awk '{print $(NF)}' | grep "^utils") ]]; then
+			aptly repo create -config=${SCRIPTPATH}config/aptly.conf -distribution=$release -component="utils" \
 			-comment="Armbian utilities (backwards compatibility)" utils
 		fi
-		if [[ -z $(aptly repo list -config=../config/aptly.conf -raw | awk '{print $(NF)}' | grep "${release}-utils") ]]; then
-			aptly repo create -config=../config/aptly.conf -distribution=$release -component="${release}-utils" \
+		if [[ -z $(aptly repo list -config=${SCRIPTPATH}config/aptly.conf -raw | awk '{print $(NF)}' | grep "${release}-utils") ]]; then
+			aptly repo create -config=${SCRIPTPATH}config/aptly.conf -distribution=$release -component="${release}-utils" \
 			-comment="Armbian ${release} utilities" ${release}-utils
 		fi
-		if [[ -z $(aptly repo list -config=../config/aptly.conf -raw | awk '{print $(NF)}' | grep "${release}-desktop") ]]; then
-			aptly repo create -config=../config/aptly.conf -distribution=$release -component="${release}-desktop" \
+		if [[ -z $(aptly repo list -config=${SCRIPTPATH}config/aptly.conf -raw | awk '{print $(NF)}' | grep "${release}-desktop") ]]; then
+			aptly repo create -config=${SCRIPTPATH}config/aptly.conf -distribution=$release -component="${release}-desktop" \
 			-comment="Armbian ${release} desktop" ${release}-desktop
 		fi
 
@@ -384,11 +386,11 @@ addtorepo()
 		# adding main
 		if find $POT -maxdepth 1 -type f -name "*.deb" 2>/dev/null | grep -q .; then
 			display_alert "Adding to repository $release" "main" "ext"
-			aptly repo add -config=../config/aptly.conf $release ${POT}*.deb
+			aptly repo add -config=${SCRIPTPATH}config/aptly.conf $release ${POT}*.deb
 			if [[ $? -ne 0 ]]; then
 				# try again with
 				display_alert "Adding by force to repository $release" "main" "ext"
-				aptly repo add -force-replace=true -config=../config/aptly.conf $release ${POT}*.deb
+				aptly repo add -force-replace=true -config=${SCRIPTPATH}config/aptly.conf $release ${POT}*.deb
 				if [[ $? -eq 0 ]]; then forceoverwrite="-force-overwrite"; else errors=$((errors+1)); fi
 			fi
 		else
@@ -400,11 +402,11 @@ addtorepo()
 		# adding main distribution packages
 		if find ${POT}${release} -maxdepth 1 -type f -name "*.deb" 2>/dev/null | grep -q .; then
 			display_alert "Adding to repository $release" "root" "ext"
-			aptly repo add -config=../config/aptly.conf $release ${POT}${release}/*.deb
+			aptly repo add -config=${SCRIPTPATH}config/aptly.conf $release ${POT}${release}/*.deb
 			if [[ $? -ne 0 ]]; then
 				# try again with
 				display_alert "Adding by force to repository $release" "root" "ext"
-				aptly repo add -force-replace=true -config=../config/aptly.conf $release ${POT}${release}/*.deb
+				aptly repo add -force-replace=true -config=${SCRIPTPATH}config/aptly.conf $release ${POT}${release}/*.deb
 				if [[ $? -eq 0 ]]; then forceoverwrite="-force-overwrite"; else errors=$((errors+1));fi
 			fi
 		else
@@ -414,11 +416,11 @@ addtorepo()
 		# adding old utils and new jessie-utils for backwards compatibility with older images
 		if find ${POT}extra/jessie-utils -maxdepth 1 -type f -name "*.deb" 2>/dev/null | grep -q .; then
 			display_alert "Adding to repository $release" "utils" "ext"
-			aptly repo add -config=../config/aptly.conf "utils" ${POT}extra/jessie-utils/*.deb
+			aptly repo add -config=${SCRIPTPATH}config/aptly.conf "utils" ${POT}extra/jessie-utils/*.deb
 			if [[ $? -ne 0 ]]; then
 				# try again with
 				display_alert "Adding by force to repository $release" "utils" "ext"
-				aptly repo add -force-replace=true -config=../config/aptly.conf "utils" ${POT}extra/jessie-utils/*.deb
+				aptly repo add -force-replace=true -config=${SCRIPTPATH}config/aptly.conf "utils" ${POT}extra/jessie-utils/*.deb
 				if [[ $? -eq 0 ]]; then forceoverwrite="-force-overwrite"; else errors=$((errors+1));fi
 			fi
 		else
@@ -429,11 +431,11 @@ addtorepo()
 		# adding release-specific utils
 		if find ${POT}extra/${release}-utils -maxdepth 1 -type f -name "*.deb" 2>/dev/null | grep -q .; then
 			display_alert "Adding to repository $release" "${release}-utils" "ext"
-			aptly repo add -config=../config/aptly.conf "${release}-utils" ${POT}extra/${release}-utils/*.deb
+			aptly repo add -config=${SCRIPTPATH}config/aptly.conf "${release}-utils" ${POT}extra/${release}-utils/*.deb
 			if [[ $? -ne 0 ]]; then
 				# try again with
 				display_alert "Adding by force to repository $release" "${release}-utils" "ext"
-				aptly repo add -force-replace=true -config=../config/aptly.conf "${release}-utils" ${POT}extra/${release}-utils/*.deb
+				aptly repo add -force-replace=true -config=${SCRIPTPATH}config/aptly.conf "${release}-utils" ${POT}extra/${release}-utils/*.deb
 				if [[ $? -eq 0 ]]; then forceoverwrite="-force-overwrite"; else errors=$((errors+1));fi
 			fi
 		else
@@ -444,11 +446,11 @@ addtorepo()
 		# adding desktop
 		if find ${POT}extra/${release}-desktop -maxdepth 1 -type f -name "*.deb" 2>/dev/null | grep -q .; then
 			display_alert "Adding to repository $release" "desktop" "ext"
-			aptly repo add -config=../config/aptly.conf "${release}-desktop" ${POT}extra/${release}-desktop/*.deb
+			aptly repo add -config=${SCRIPTPATH}config/aptly.conf "${release}-desktop" ${POT}extra/${release}-desktop/*.deb
 			if [[ $? -ne 0 ]]; then
 				# try again with
 				display_alert "Adding by force to repository $release" "desktop" "ext"
-				aptly repo add -force-replace=true -config=../config/aptly.conf "${release}-desktop" ${POT}extra/${release}-desktop/*.deb
+				aptly repo add -force-replace=true -config=${SCRIPTPATH}config/aptly.conf "${release}-desktop" ${POT}extra/${release}-desktop/*.deb
 				if [[ $? -eq 0 ]]; then forceoverwrite="-force-overwrite"; else errors=$((errors+1));fi
 			fi
 		else
@@ -456,13 +458,13 @@ addtorepo()
 		fi
 		COMPONENTS="${COMPONENTS} ${release}-desktop"
 
-		local mainnum=$(aptly repo show -with-packages -config=../config/aptly.conf $release | grep "Number of packages" | awk '{print $NF}')
-		local utilnum=$(aptly repo show -with-packages -config=../config/aptly.conf ${release}-desktop | grep "Number of packages" | awk '{print $NF}')
-		local desknum=$(aptly repo show -with-packages -config=../config/aptly.conf ${release}-utils | grep "Number of packages" | awk '{print $NF}')
+		local mainnum=$(aptly repo show -with-packages -config=${SCRIPTPATH}config/aptly.conf $release | grep "Number of packages" | awk '{print $NF}')
+		local utilnum=$(aptly repo show -with-packages -config=${SCRIPTPATH}config/aptly.conf ${release}-desktop | grep "Number of packages" | awk '{print $NF}')
+		local desknum=$(aptly repo show -with-packages -config=${SCRIPTPATH}config/aptly.conf ${release}-utils | grep "Number of packages" | awk '{print $NF}')
 
 		if [ $mainnum -gt 0 ] && [ $utilnum -gt 0 ] && [ $desknum -gt 0 ]; then
 			# publish
-			aptly publish $forceoverwrite -passphrase=$GPG_PASS -origin=Armbian -label=Armbian -config=../config/aptly.conf -component=${COMPONENTS// /,} \
+			aptly publish $forceoverwrite -passphrase=$GPG_PASS -gpg-provider=internal -origin=Armbian -label=Armbian -config=${SCRIPTPATH}config/aptly.conf -component=${COMPONENTS// /,} \
 				--distribution=$release repo $release ${COMPONENTS//main/}
 			if [[ $? -ne 0 ]]; then
 				display_alert "Publishing failed" "$release" "err"
@@ -478,7 +480,7 @@ addtorepo()
 
 	# display what we have
 	display_alert "List of local repos" "local" "info"
-	(aptly repo list -config=../config/aptly.conf) | egrep packages
+	(aptly repo list -config=${SCRIPTPATH}config/aptly.conf) | egrep packages
 
 	# remove debs if no errors found
 	if [[ $errors -eq 0 ]]; then
@@ -532,17 +534,19 @@ prepare_host()
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
 	nfs-kernel-server btrfs-tools ncurses-term p7zip-full kmod dosfstools libc6-dev-armhf-cross \
 	curl patchutils python liblz4-tool libpython2.7-dev linux-base swig libpython-dev aptly acl \
-	locales ncurses-base pixz dialog systemd-container udev distcc lib32stdc++6 libc6-i386 lib32ncurses5 lib32tinfo5 \
+	locales ncurses-base pixz dialog systemd-container udev lib32stdc++6 libc6-i386 lib32ncurses5 lib32tinfo5 \
 	bison libbison-dev flex libfl-dev"
 
 	local codename=$(lsb_release -sc)
 	display_alert "Build host OS release" "${codename:-(unknown)}" "info"
 
-	# Ubuntu Xenial x86_64 is the only supported host OS release
+	# Ubuntu Xenial x86_64 is the only fully supported host OS release
+	# Ubuntu Bionic x86_64 support is WIP, especially for building full images and additional packages
 	# Using Docker/VirtualBox/Vagrant is the only supported way to run the build script on other Linux distributions
+	#
 	# NO_HOST_RELEASE_CHECK overrides the check for a supported host system
 	# Disable host OS check at your own risk, any issues reported with unsupported releases will be closed without a discussion
-	if [[ -z $codename || "xenial" != *"$codename"* ]]; then
+	if [[ -z $codename || "xenial bionic" != *"$codename"* ]]; then
 		if [[ $NO_HOST_RELEASE_CHECK == yes ]]; then
 			display_alert "You are running on an unsupported system" "${codename:-(unknown)}" "wrn"
 			display_alert "Do not report any errors, warnings or other issues encountered beyond this point" "" "wrn"
@@ -586,7 +590,7 @@ prepare_host()
 	# distribution packages are buggy, download from author
 	if [[ ! -f /etc/apt/sources.list.d/aptly.list ]]; then
 		display_alert "Updating from external repository" "aptly" "info"
-		wget -qO - https://www.aptly.info/pubkey.txt | apt-key add - >/dev/null 2>&1
+		apt-key adv --keyserver pool.sks-keyservers.net --recv-keys ED75B5A4483DA07C >/dev/null 2>&1
 		echo "deb http://repo.aptly.info/ squeeze main" > /etc/apt/sources.list.d/aptly.list
 	fi
 
@@ -598,15 +602,10 @@ prepare_host()
 		update-ccache-symlinks
 	fi
 
-	# add bionic repository and install more recent qemu and debootstrap
-	if [[ ! -f /etc/apt/sources.list.d/bionic.list && $codename == "xenial" ]]; then
-		echo "deb http://us.archive.ubuntu.com/ubuntu/ bionic main restricted universe" > /etc/apt/sources.list.d/bionic.list
-		echo "Package: *" > /etc/apt/preferences.d/bionic.pref
-		echo "Pin: release n=bionic" >> /etc/apt/preferences.d/bionic.pref
-		echo "Pin-Priority: -10" >> /etc/apt/preferences.d/bionic.pref
-		apt -q update
-#		apt -y upgrade
-		apt -t bionic -y --no-install-recommends install qemu-user-static debootstrap binfmt-support
+	# Temorally broken in Bionic, reverting to prvious version
+	# https://github.com/aptly-dev/aptly/issues/740
+	if [[ $(dpkg -s aptly | grep '^Version:' | sed 's/Version: //') != "1.2.0" && "$codename" == "bionic" ]]; then
+		apt -qq -y --allow-downgrades install aptly=1.2.0
 	fi
 
 	# sync clock
@@ -637,23 +636,29 @@ prepare_host()
 		find $SRC/output $SRC/userpatches -type d ! -group sudo -exec chgrp --quiet sudo {} \;
 		find $SRC/output $SRC/userpatches -type d ! -perm -g+w,g+s -exec chmod --quiet g+w,g+s {} \;
 	fi
-	mkdir -p $DEST/debs/extra $DEST/{config,debug,patch} $SRC/userpatches/overlay $SRC/cache/{sources,toolchains,rootfs} $SRC/.tmp
+	mkdir -p $DEST/debs/extra $DEST/{config,debug,patch} $SRC/userpatches/overlay $SRC/cache/{sources,toolchains,utility,rootfs} $SRC/.tmp
 
 	find $SRC/patch -type d ! -name . | sed "s%/patch%/userpatches%" | xargs mkdir -p
 
 	# download external Linaro compiler and missing special dependencies since they are needed for certain sources
+
+	# Use backup server by default to balance the load
+
+	ARMBIANSERVER=dl.armbian.com
+
 	local toolchains=(
-		"https://dl.armbian.com/_toolchains/gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-4.9.4-2017.01-x86_64_aarch64-linux-gnu.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabi.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-5.5.0-2017.10-x86_64_aarch64-linux-gnu.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabi.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabihf.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-6.4.1-2017.11-x86_64_arm-linux-gnueabihf.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-6.4.1-2017.11-x86_64_aarch64-linux-gnu.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-7.2.1-2017.11-x86_64_aarch64-linux-gnu.tar.xz"
-		"https://dl.armbian.com/_toolchains/gcc-linaro-7.2.1-2017.11-x86_64_arm-linux-gnueabihf.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-4.9.4-2017.01-x86_64_aarch64-linux-gnu.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabi.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-5.5.0-2017.10-x86_64_aarch64-linux-gnu.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabi.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-5.5.0-2017.10-x86_64_arm-linux-gnueabihf.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-6.4.1-2017.11-x86_64_arm-linux-gnueabihf.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-6.4.1-2017.11-x86_64_aarch64-linux-gnu.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-7.2.1-2017.11-x86_64_aarch64-linux-gnu.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-7.2.1-2017.11-x86_64_arm-linux-gnueabihf.tar.xz"
+		"https://${ARMBIANSERVER}/_toolchains/gcc-linaro-7.2.1-2017.11-x86_64_arm-eabi.tar.xz"
 		)
 
 	for toolchain in ${toolchains[@]}; do
@@ -674,6 +679,9 @@ prepare_host()
 			rm -rf $SRC/cache/toolchains/$dir
 		fi
 	done
+
+	# download etcher CLI utility
+	download_etcher_cli
 
 	[[ ! -f $SRC/userpatches/customize-image.sh ]] && cp $SRC/config/templates/customize-image.sh.template $SRC/userpatches/customize-image.sh
 
@@ -735,6 +743,44 @@ download_toolchain()
 		display_alert "Verification failed" "" "wrn"
 	fi
 }
+
+
+download_etcher_cli()
+{
+        local url=$(curl -s https://api.github.com/repos/resin-io/etcher/releases | grep etcher-cli | grep linux-x64 | grep browser_download_url | head -1 | cut -d \" -f 4)
+        local filename=${url##*/}
+        local dirname=${filename/.tar.gz/-dist}
+
+	export PATH="$PATH:$SRC/cache/utility/$dirname"
+
+        if [[ -f $SRC/cache/utility/$dirname/.download-complete ]]; then
+                return
+        fi
+
+        cd $SRC/cache/utility/
+
+        display_alert "Downloading" "$dirname"
+        curl -Lf --progress-bar $url -o $filename
+
+        local verified=false
+
+        display_alert "Verifying"
+
+        local a=$(curl -sL $(curl -s https://api.github.com/repos/resin-io/etcher/releases | grep SHA | grep browser_download_url | head -1 | cut -d \" -f 4) | grep etcher-cli | grep linux-x64)
+        local b=$(sha256sum $filename)
+
+        [[ -n $a && -n $b && "$a" == "$b" ]] && verified=true
+
+        if [[ $verified == true ]]; then
+                display_alert "Extracting"
+                tar --no-same-owner --overwrite -xf $filename && touch $SRC/cache/utility/$dirname/.download-complete && rm $filename
+                display_alert "Download complete" "" "info"
+        else
+                display_alert "Verification failed" "" "wrn"
+        fi
+}
+
+
 
 show_developer_warning()
 {

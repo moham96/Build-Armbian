@@ -13,7 +13,7 @@ compile_armbian-config()
 
 	display_alert "Building deb" "armbian-config" "info"
 
-	fetch_from_repo "https://github.com/armbian/config" "armbian-config" "branch:development"
+	fetch_from_repo "https://github.com/armbian/config" "armbian-config" "branch:master"
 
 	mkdir -p $tmpdir/{DEBIAN,usr/bin/,usr/sbin/,usr/lib/armbian-config/}
 
@@ -24,10 +24,10 @@ compile_armbian-config()
 	Architecture: all
 	Maintainer: $MAINTAINER <$MAINTAINERMAIL>
 	Replaces: armbian-bsp
-	Depends: bash, iperf3, qrencode, psmisc, curl, bc, expect, dialog, network-manager, sunxi-tools, iptables, resolvconf, \
-	debconf-utils, unzip, build-essential, html2text, apt-transport-https, html2text, dirmngr, software-properties-common, \
-	libpam-google-authenticator, qrencode
+	Depends: bash, iperf3, psmisc, curl, bc, expect, dialog, iptables, resolvconf, \
+	debconf-utils, unzip, build-essential, html2text, apt-transport-https, html2text, dirmngr, software-properties-common
 	Recommends: armbian-bsp
+	Suggests: libpam-google-authenticator, qrencode, network-manager, sunxi-tools
 	Section: utils
 	Priority: optional
 	Description: Armbian configuration utility
@@ -53,4 +53,6 @@ if [[ ! -f $DEST/debs/armbian-config_${REVISION}_all.deb ]]; then
 	compile_armbian-config
 fi
 
+# installing additional dependencies here so they are installed only with armbian-config
+chroot $SDCARD /bin/bash -c "apt install -q -y iperf3 debconf-utils html2text dirmngr expect"
 install_deb_chroot "$DEST/debs/armbian-config_${REVISION}_all.deb"

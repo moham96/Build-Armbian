@@ -1,6 +1,5 @@
 # Armbian firstrun service
-# Creates the swap file, regenerates the SSH keys,
-# performs additional first run tweaks
+# Regenerates the SSH keys and performs additional first run tweaks
 # This service will run in parallel with other services
 
 [Unit]
@@ -10,7 +9,9 @@ Before=getty.target system-getty.slice
 [Service]
 Type=simple
 RemainAfterExit=yes
-ExecStart=/bin/bash /etc/init.d/firstrun start
+ExecStart=/usr/lib/armbian/armbian-firstrun start
+TimeoutStartSec=2min
 
 [Install]
 WantedBy=multi-user.target
+

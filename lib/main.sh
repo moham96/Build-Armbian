@@ -44,7 +44,7 @@ source $SRC/lib/debootstrap-ng.sh 			# System specific install
 source $SRC/lib/image-helpers.sh			# helpers for OS image building
 source $SRC/lib/distributions.sh 			# System specific install
 source $SRC/lib/desktop.sh 				# Desktop specific install
-source $SRC/lib/desktop-ng.sh 				# Desktop package creation
+source $SRC/lib/desktop-old.sh 				# Desktop install old
 source $SRC/lib/compilation.sh 				# Patching and compilation of kernel, uboot, ATF
 source $SRC/lib/makeboarddeb.sh 			# Create board support package
 source $SRC/lib/general.sh				# General functions
@@ -57,16 +57,6 @@ rm -f $DEST/debug/*.log > /dev/null 2>&1
 date +"%d_%m_%Y-%H_%M_%S" > $DEST/debug/timestamp
 # delete compressed logs older than 7 days
 (cd $DEST/debug && find . -name '*.tgz' -mtime +7 -delete) > /dev/null
-
-# Script parameters handling
-for i in "$@"; do
-	if [[ $i == *=* ]]; then
-		parameter=${i%%=*}
-		value=${i##*=}
-		display_alert "Command line: setting $parameter to" "${value:-(empty)}" "info"
-		eval $parameter=$value
-	fi
-done
 
 if [[ $PROGRESS_DISPLAY == none ]]; then
 	OUTPUT_VERYSILENT=yes
@@ -207,10 +197,10 @@ fi
 
 if [[ $KERNEL_ONLY != yes && -z $RELEASE ]]; then
 	options=()
-#	options+=("jessie" "Debian 8 Jessie")
+	options+=("jessie" "Debian 8 Jessie")
 	options+=("stretch" "Debian 9 Stretch")
-#	options+=("xenial" "Ubuntu Xenial 16.04 LTS")
-	options+=("bionic" "Ubuntu Bionic 18.04 LTS")
+	options+=("xenial" "Ubuntu Xenial 16.04 LTS")
+	[[ $EXPERT = yes ]] && options+=("bionic" "Ubuntu Bionic 18.04 LTS")
 	RELEASE=$(dialog --stdout --title "Choose a release" --backtitle "$backtitle" --menu "Select the target OS release" \
 		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
 	unset options

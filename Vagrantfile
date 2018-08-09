@@ -6,7 +6,7 @@ Vagrant.require_version ">= 1.5"
 $provisioning_script = <<SCRIPT
 # use remote git version instead of sharing a copy from host to preserve proper file permissions
 # and prevent permission related issues for the temp directory
-git clone https://github.com/150balbes/build /home/vagrant/armbian
+git clone https://github.com/150balbes/Build-Armbian /home/vagrant/armbian
 mkdir -p /vagrant/output /vagrant/userpatches
 ln -sf /vagrant/output /home/vagrant/armbian/output
 ln -sf /vagrant/userpatches /home/vagrant/armbian/userpatches
@@ -15,8 +15,8 @@ SCRIPT
 Vagrant.configure(2) do |config|
 
     # What box should we base this build on?
-    config.vm.box = "ubuntu/xenial64"
-    config.vm.box_version = ">= 20180126.0.0"
+    config.vm.box = "ubuntu/bionic64"
+    config.vm.box_version = ">= 20180719.0.0"
 
     #######################################################################
     # THIS REQUIRES YOU TO INSTALL A PLUGIN. RUN THE COMMAND BELOW...
