@@ -20,9 +20,9 @@ install_common()
 	[[ -f $SDCARD/etc/environment ]] && echo "ARCH=${ARCH//hf}" >> $SDCARD/etc/environment
 
 	# add dummy fstab entry to make mkinitramfs happy
-	echo "LABEL=ROOTFS / $ROOTFS_TYPE defaults 0 1" >> $SDCARD/etc/fstab
+	echo "/dev/mmcblk0p1 / $ROOTFS_TYPE defaults 0 1" >> $SDCARD/etc/fstab
 	# required for initramfs-tools-core on Stretch since it ignores the / fstab entry
-	#echo "/dev/mmcblk0p2 /usr $ROOTFS_TYPE defaults 0 2" >> $SDCARD/etc/fstab
+	echo "/dev/mmcblk0p2 /usr $ROOTFS_TYPE defaults 0 2" >> $SDCARD/etc/fstab
 
 	# create modules file
 	if [[ $BRANCH == dev && -n $MODULES_DEV ]]; then
@@ -51,6 +51,13 @@ install_common()
 	# remove Ubuntu's legal text
 	[[ -f $SDCARD/etc/legal ]] && rm $SDCARD/etc/legal
 
+	# Prevent loading paralel printer port drivers which we don't need here.Suppress boot error if kernel modules are absent
+	if [[ -f $SDCARD/etc/modules-load.d/cups-filters.conf ]]; then
+		sed "s/^lp/#lp/" -i $SDCARD/etc/modules-load.d/cups-filters.conf
+		sed "s/^ppdev/#ppdev/" -i $SDCARD/etc/modules-load.d/cups-filters.conf
+		sed "s/^parport_pc/#parport_pc/" -i $SDCARD/etc/modules-load.d/cups-filters.conf
+	fi
+
 	# console fix due to Debian bug
 	sed -e 's/CHARMAP=".*"/CHARMAP="'$CONSOLE_CHAR'"/g' -i $SDCARD/etc/default/console-setup
 
@@ -69,7 +76,7 @@ install_common()
 	# NOTE: this needs to be executed before family_tweaks
 	local bootscript_src=${BOOTSCRIPT%%:*}
 	local bootscript_dst=${BOOTSCRIPT##*:}
-#	cp $SRC/config/bootscripts/$bootscript_src $SDCARD/boot/$bootscript_dst
+	cp $SRC/config/bootscripts/$bootscript_src $SDCARD/boot/$bootscript_dst
 
 	[[ -n $BOOTENV_FILE && -f $SRC/config/bootenv/$BOOTENV_FILE ]] && \
 		cp $SRC/config/bootenv/$BOOTENV_FILE $SDCARD/boot/armbianEnv.txt
@@ -106,21 +113,23 @@ install_common()
 	ff02::2     ip6-allrouters
 	EOF
 
-#	display_alert "Installing kernel" "$CHOSEN_KERNEL" "info"
+	# install kernel and u-boot packages
 	install_deb_chroot "$DEST/debs/${CHOSEN_KERNEL}_${REVISION}_${ARCH}.deb"
+	install_deb_chroot "$DEST/debs/${CHOSEN_UBOOT}_${REVISION}_${ARCH}.deb"
 
-#	display_alert "Installing u-boot" "$CHOSEN_UBOOT" "info"
-	if [[ -f $DEST/debs/${CHOSEN_UBOOT}_${REVISION}_${ARCH}.deb ]]; then
-		install_deb_chroot "$DEST/debs/${CHOSEN_UBOOT}_${REVISION}_${ARCH}.deb"
+	if [[ $BUILD_DESKTOP == yes ]]; then
+		install_deb_chroot "$DEST/debs/$RELEASE/armbian-${RELEASE}-desktop_${REVISION}_all.deb"
+		# install display manager
+		desktop_postinstall
 	fi
 
 	if [[ $INSTALL_HEADERS == yes ]]; then
 		install_deb_chroot "$DEST/debs/${CHOSEN_KERNEL/image/headers}_${REVISION}_${ARCH}.deb"
 	fi
 
-#	if [[ -f $DEST/debs/armbian-firmware_${REVISION}_${ARCH}.deb ]]; then
-#		install_deb_chroot "$DEST/debs/armbian-firmware_${REVISION}_${ARCH}.deb"
-#	fi
+	if [[ -f $DEST/debs/armbian-firmware_${REVISION}_${ARCH}.deb ]]; then
+		install_deb_chroot "$DEST/debs/armbian-firmware_${REVISION}_${ARCH}.deb"
+	fi
 
 	if [[ -f $DEST/debs/${CHOSEN_KERNEL/image/dtb}_${REVISION}_${ARCH}.deb ]]; then
 		install_deb_chroot "$DEST/debs/${CHOSEN_KERNEL/image/dtb}_${REVISION}_${ARCH}.deb"
@@ -140,21 +149,15 @@ install_common()
 			linux-u-boot-${BOARD}-${BRANCH} ${CHOSEN_KERNEL/image/dtb}" >> $DEST/debug/install.log 2>&1
 	fi
 
-#	if [[ $BUILD_DESKTOP == yes ]]; then
-#		install_deb_chroot "$DEST/debs/$RELEASE/armbian-${RELEASE}-desktop_${REVISION}_all.deb"
-#		# install display manager
-#		desktop_postinstall
-#	fi
-
 	# copy boot splash images
-###	cp $SRC/packages/blobs/splash/armbian-u-boot.bmp $SDCARD/boot/boot.bmp
-###	cp $SRC/packages/blobs/splash/armbian-desktop.png $SDCARD/boot/boot-desktop.png
+	cp $SRC/packages/blobs/splash/armbian-u-boot.bmp $SDCARD/boot/boot.bmp
+	cp $SRC/packages/blobs/splash/armbian-desktop.png $SDCARD/boot/boot-desktop.png
 
 	# execute $LINUXFAMILY-specific tweaks
 	[[ $(type -t family_tweaks) == function ]] && family_tweaks
 
 	# enable additional services
-	chroot $SDCARD /bin/bash -c "systemctl --no-reload enable firstrun.service resize2fs.service armhwinfo.service log2ram.service firstrun-config.service >/dev/null 2>&1"
+	chroot $SDCARD /bin/bash -c "systemctl --no-reload enable armbian-firstrun.service armbian-firstrun-config.service armbian-zram-config.service armbian-hardware-optimize.service armbian-ramlog.service armbian-resize-filesystem.service armbian-hardware-monitor.service >/dev/null 2>&1"
 
 	# copy "first run automated config, optional user configured"
  	cp $SRC/packages/bsp/armbian_first_run.txt.template $SDCARD/boot/armbian_first_run.txt.template
@@ -196,7 +199,7 @@ install_common()
 
 	# DNS fix. package resolvconf is not available everywhere
 	if [ -d /etc/resolvconf/resolv.conf.d ]; then
-		echo 'nameserver 8.8.8.8' > $SDCARD/etc/resolvconf/resolv.conf.d/head
+		echo 'nameserver 1.1.1.1' > $SDCARD/etc/resolvconf/resolv.conf.d/head
 	fi
 
 	# premit root login via SSH for the first boot
@@ -208,7 +211,7 @@ install_common()
 	# configure network manager
 	sed "s/managed=\(.*\)/managed=true/g" -i $SDCARD/etc/NetworkManager/NetworkManager.conf
 	# disable DNS management withing NM for !Stretch
-	[[ $RELEASE != stretch ]] && sed "s/\[main\]/\[main\]\ndns=none/g" -i $SDCARD/etc/NetworkManager/NetworkManager.conf
+	#[[ $RELEASE != stretch || $RELEASE != jessie || $RELEASE != bionic ]] && sed "s/\[main\]/\[main\]\ndns=none/g" -i $SDCARD/etc/NetworkManager/NetworkManager.conf
 	if [[ -n $NM_IGNORE_DEVICES ]]; then
 		mkdir -p $SDCARD/etc/NetworkManager/conf.d/
 		cat <<-EOF > $SDCARD/etc/NetworkManager/conf.d/10-ignore-interfaces.conf
@@ -223,6 +226,13 @@ install_distribution_specific()
 	display_alert "Applying distribution specific tweaks for" "$RELEASE" "info"
 	case $RELEASE in
 	jessie)
+		if [[ -z $NM_IGNORE_DEVICES ]]; then
+			echo "# Network Manager under Jessie doesn't work properly. Workaround" >> $SDCARD/etc/network/interfaces.d/eth0.conf
+			echo "auto eth0" >> $SDCARD/etc/network/interfaces.d/eth0.conf
+			echo "iface eth0 inet dhcp" >> $SDCARD/etc/network/interfaces.d/eth0.conf
+			echo "[keyfile]" >> $SDCARD/etc/NetworkManager/NetworkManager.conf
+			echo "unmanaged-devices=interface-name:eth0" >> $SDCARD/etc/NetworkManager/NetworkManager.conf
+		fi
 		;;
 
 	xenial)
@@ -255,6 +265,8 @@ install_distribution_specific()
 		exit 0
 		EOF
 		chmod +x $SDCARD/etc/rc.local
+		# DNS fix
+		sed -i "s/#DNS=.*/DNS=1.1.1.1/g" $SDCARD/etc/systemd/resolved.conf
 		;;
 	bionic)
 		# remove doubled uname from motd
@@ -285,6 +297,13 @@ install_distribution_specific()
 		  version: 2
 		  renderer: NetworkManager
 		EOF
+		# DNS fix
+		sed -i "s/#DNS=.*/DNS=1.1.1.1/g" $SDCARD/etc/systemd/resolved.conf
+		# Journal service adjustements
+		sed -i "s/#Storage=.*/Storage=volatile/g" $SDCARD/etc/systemd/journald.conf
+		sed -i "s/#Compress=.*/Compress=yes/g" $SDCARD/etc/systemd/journald.conf
+		sed -i "s/#RateLimitIntervalSec=.*/RateLimitIntervalSec=30s/g" $SDCARD/etc/systemd/journald.conf
+		sed -i "s/#RateLimitBurst=.*/RateLimitBurst=10000/g" $SDCARD/etc/systemd/journald.conf
 		;;
 	esac
 }
@@ -295,6 +314,11 @@ post_debootstrap_tweaks()
 	rm -f $SDCARD/sbin/initctl $SDCARD/sbin/start-stop-daemon
 	chroot $SDCARD /bin/bash -c "dpkg-divert --quiet --local --rename --remove /sbin/initctl"
 	chroot $SDCARD /bin/bash -c "dpkg-divert --quiet --local --rename --remove /sbin/start-stop-daemon"
+
+	chroot $SDCARD /bin/bash -c 'echo "resolvconf resolvconf/linkify-resolvconf boolean true" | debconf-set-selections'
+	mkdir -p $SDCARD/var/lib/resolvconf/
+	:> $SDCARD/var/lib/resolvconf/linkified
+
 	rm -f $SDCARD/usr/sbin/policy-rc.d $SDCARD/usr/bin/$QEMU_BINARY
 
 	# reenable resolvconf managed resolv.conf

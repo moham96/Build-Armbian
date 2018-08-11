@@ -98,11 +98,11 @@
 -packagename=linux-image-$version
 -kernel_headers_packagename=linux-headers-$version
 -libc_headers_packagename=linux-libc-dev
-+packagename=linux-image-next"$LOCAL_VERSION"
-+fwpackagename=linux-firmware-image-next"$LOCAL_VERSION"
-+kernel_headers_packagename=linux-headers-next"$LOCAL_VERSION"
-+dtb_packagename=linux-dtb-next"$LOCAL_VERSION"
-+libc_headers_packagename=linux-libc-dev-next"$LOCAL_VERSION"
++packagename=linux-image-next"$LOCALVERSION"
++fwpackagename=linux-firmware-image-next"$LOCALVERSION"
++kernel_headers_packagename=linux-headers-next"$LOCALVERSION"
++dtb_packagename=linux-dtb-next"$LOCALVERSION"
++libc_headers_packagename=linux-libc-dev-next"$LOCALVERSION"
  dbg_packagename=$packagename-dbg
 +debarch=
 +forcearch=

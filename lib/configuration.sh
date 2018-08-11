@@ -10,15 +10,15 @@
 # common options
 # daily beta build contains date in subrevision
 if [[ $BETA == yes && -z $SUBREVISION ]]; then SUBREVISION="."$(date --date="tomorrow" +"%y%m%d"); fi
-REVISION="5.44$SUBREVISION" # all boards have same revision
+REVISION="5.55$SUBREVISION" # all boards have same revision
 ROOTPWD="1234" # Must be changed @first login
-MAINTAINER="Oleg Ivanov" # deb signature
-MAINTAINERMAIL="balbes-150@yandex.ru" # deb signature
+MAINTAINER="Igor Pecovnik" # deb signature
+MAINTAINERMAIL="igor.pecovnik@****l.com" # deb signature
 TZDATA=`cat /etc/timezone` # Timezone for target is taken from host or defined here.
 USEALLCORES=yes # Use all CPU cores for compiling
 EXIT_PATCHING_ERROR="" # exit patching if failed
 HOST="$(echo "$BOARD" | cut -f1 -d-)" # set hostname to the board
-ROOTFSCACHE_VERSION=3
+ROOTFSCACHE_VERSION=4
 CHROOT_CACHE_VERSION=6
 [[ -z $DISPLAY_MANAGER ]] && DISPLAY_MANAGER=nodm
 ROOTFS_CACHE_MAX=16 # max number of rootfs cache, older ones will be cleaned up
@@ -55,7 +55,6 @@ ARCH=armhf
 KERNEL_IMAGE_TYPE=zImage
 SERIALCON=ttyS0
 CAN_BUILD_STRETCH=yes
-SRC_LOADADDR=""
 
 # single ext4 partition is the default and preferred configuration
 #BOOTFS_TYPE=''
@@ -77,6 +76,7 @@ fi
 
 [[ $RELEASE == stretch && $CAN_BUILD_STRETCH != yes ]] && exit_with_error "Building Debian Stretch images with selected kernel is not supported"
 [[ $RELEASE == bionic && $CAN_BUILD_STRETCH != yes ]] && exit_with_error "Building Ubuntu Bionic images with selected kernel is not supported"
+[[ $RELEASE == bionic && $(lsb_release -sc) == xenial ]] && exit_with_error "Building Ubuntu Bionic images requires a Bionic build host. Please upgrade your host or select a different target OS"
 
 [[ -n $ATFSOURCE && -z $ATF_USE_GCC ]] && exit_with_error "Error in configuration: ATF_USE_GCC is unset"
 [[ -z $UBOOT_USE_GCC ]] && exit_with_error "Error in configuration: UBOOT_USE_GCC is unset"
@@ -109,6 +109,9 @@ BOOTCONFIG_VAR_NAME=BOOTCONFIG_${BRANCH^^}
 
 if [[ $RELEASE == xenial || $RELEASE == bionic ]]; then DISTRIBUTION="Ubuntu"; else DISTRIBUTION="Debian"; fi
 
+# Base system dependencies
+DEBOOTSTRAP_LIST="locales,gnupg,ifupdown"
+[[ $BUILD_DESKTOP == yes ]] && DEBOOTSTRAP_LIST="locales,gnupg,ifupdown,libgtk2.0-bin"
 
 # Essential packages
 PACKAGE_LIST="bc bridge-utils build-essential cpufrequtils device-tree-compiler figlet fbset fping \
@@ -116,84 +119,75 @@ PACKAGE_LIST="bc bridge-utils build-essential cpufrequtils device-tree-compiler 
 	wireless-regdb ncurses-term python3-apt sysfsutils toilet u-boot-tools unattended-upgrades \
 	usbutils wireless-tools console-setup unicode-data openssh-server initramfs-tools \
 	ca-certificates resolvconf expect iptables automake \
-	bison flex libwrap0-dev libssl-dev libnl-3-dev libnl-genl-3-dev \
-	mc abootimg wget"
+	bison flex libwrap0-dev libssl-dev libnl-3-dev libnl-genl-3-dev"
 
 
 # Non-essential packages
-PACKAGE_LIST_ADDITIONAL="alsa-utils btrfs-tools dosfstools iotop iozone3 stress sysbench screen ntfs-3g vim pciutils \
-	evtest htop pv lsof apt-transport-https libfuse2 libdigest-sha-perl libproc-processtable-perl aptitude dnsutils f3 haveged \
-	hdparm rfkill vlan sysstat bash-completion hostapd git ethtool network-manager unzip ifenslave command-not-found lirc \
-	libpam-systemd iperf3 software-properties-common libnss-myhostname f2fs-tools avahi-autoipd iputils-arping qrencode"
+PACKAGE_LIST_ADDITIONAL="armbian-firmware alsa-utils btrfs-tools dosfstools iotop iozone3 stress sysbench screen \
+	ntfs-3g vim pciutils evtest htop pv lsof apt-transport-https libfuse2 libdigest-sha-perl \
+	libproc-processtable-perl aptitude dnsutils f3 haveged hdparm rfkill vlan sysstat bash-completion \
+	hostapd git ethtool network-manager unzip ifenslave command-not-found libpam-systemd iperf3 \
+	software-properties-common libnss-myhostname f2fs-tools avahi-autoipd iputils-arping qrencode"
+
 
 # Dependent desktop packages
-PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit x11-xserver-utils xterm thunar-volman \
-	network-manager-gnome network-manager-openvpn-gnome gnome-keyring gcr libgck-1-0 p11-kit \
-	libgl1-mesa-dri gparted synaptic policykit-1 profile-sync-daemon mesa-utils"
+PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit \
+	x11-xserver-utils xfce4 lxtask xfce4-terminal thunar-volman gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf \
+	libgtk2.0-bin libgnome2-perl network-manager-gnome xfce4-notifyd gnome-keyring gcr libgck-1-0 p11-kit pasystray pavucontrol \
+	pulseaudio pavumeter pulseaudio-module-gconf bluez bluez-tools pulseaudio-module-bluetooth blueman libpam-gnome-keyring \
+	libgl1-mesa-dri policykit-1 profile-sync-daemon gnome-orca numix-gtk-theme synaptic gparted mc"
 
-PACKAGE_LIST_OFFICE="lxtask mirage galculator hexchat mpv \
-	gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf libgtk2.0-bin libgnome2-perl \
-	libpam-gnome-keyring thunderbird system-config-printer-common \
-	bluetooth bluez bluez-tools blueman geany atril xarchiver leafpad \
-	libreoffice-writer libreoffice-style-tango libreoffice-gtk fbi cups-pk-helper cups"
 
-PACKAGE_LIST_PL="pasystray paman pavucontrol pulseaudio pavumeter pulseaudio-module-gconf pulseaudio-module-bluetooth  paprefs"
+# Recommended desktop packages
+PACKAGE_LIST_DESKTOP_RECOMMENDS="mirage galculator hexchat xfce4-screenshooter network-manager-openvpn-gnome mpv fbi cups-pk-helper \
+	cups geany atril xarchiver leafpad"
 
-#case $DISPLAY_MANAGER in
-#	nodm)
-#	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP nodm"
-#	;;
 
-#	lightdm)
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings"
-#	;;
-
-#	*)
-#	exit_with_error "Unsupported display manager selected" "$DISPLAY_MANAGER"
-#	;;
-#esac
-
-# add XFCE or MATE
-case $BUILD_DESKTOP_DE in
-	icewm)
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP icewm"
+case $DISPLAY_MANAGER in
+	nodm)
+		PACKAGE_LIST_DISPLAY_MANAGER="nodm"
 	;;
-	xfce)
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP $PACKAGE_LIST_OFFICE"
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP xfce4 xfce4-screenshooter xfce4-notifyd xfce4-terminal xfce4-notifyd"
+
+	lightdm)
+		PACKAGE_LIST_DISPLAY_MANAGER="lightdm lightdm-gtk-greeter"
 	;;
-	mate)
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP $PACKAGE_LIST_OFFICE"
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mate-desktop-environment-extras mate-media mate-screensaver mate-utils mate-power-manager mate-applets mozo tango-icon-theme gnome-orca"
+
+	*)
+		exit_with_error "Unsupported display manager selected" "$DISPLAY_MANAGER"
 	;;
 esac
+
+
 
 # Release specific packages
 case $RELEASE in
+
 	jessie)
-	PACKAGE_LIST_RELEASE="less kbd gnupg2 dirmngr"
-	PACKAGE_LIST_DESKTOP+=" paman libgcr-3-common gcj-jre-headless policykit-1-gnome eject numix-icon-theme iceweasel pluma system-config-printer"
+		PACKAGE_LIST_RELEASE="less kbd gnupg2 dirmngr"
+		PACKAGE_LIST_DESKTOP+=" paman libgcr-3-common gcj-jre-headless policykit-1-gnome eject numix-icon-theme"
+		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" iceweasel pluma system-config-printer"
 	;;
-	stretch)
-	PACKAGE_LIST_RELEASE="man-db less kbd net-tools netcat-openbsd gnupg2 dirmngr"
-	PACKAGE_LIST_DESKTOP+=" thunderbird chromium dbus-x11 gksu"
-	[[ $BUILD_DESKTOP_DE != icewm  ]] && PACKAGE_LIST_DESKTOP+=" libgcr-3-common gcj-jre-headless system-config-printer-common system-config-printer"
-	[[ $BUILD_DESKTOP_DE != icewm  ]] && PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP $PACKAGE_LIST_PL"
-	;;
+
 	xenial)
-	PACKAGE_LIST_RELEASE="man-db nano zram-config"
-	PACKAGE_LIST_DESKTOP+=" thunderbird chromium-browser gksu"
-	[[ $BUILD_DESKTOP_DE != icewm  ]] && PACKAGE_LIST_DESKTOP+="  libgcr-3-common gcj-jre-headless numix-icon-theme language-selector-gnome system-config-printer-common system-config-printer-gnome ubuntu-mate-lightdm-theme"
-	[[ $BUILD_DESKTOP_DE != icewm  ]] && PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP $PACKAGE_LIST_PL"
-	[[ $ARCH == armhf ]] && PACKAGE_LIST_DESKTOP+=" mate-utils mate-settings-daemon"
+		PACKAGE_LIST_RELEASE="man-db wget nano"
+		PACKAGE_LIST_DESKTOP+=" paman libgcr-3-common gcj-jre-headless paprefs numix-icon-theme"
+		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium-browser language-selector-gnome system-config-printer-common system-config-printer-gnome"
 	;;
+
+	stretch)
+		PACKAGE_LIST_RELEASE="man-db less kbd net-tools netcat-openbsd gnupg2 dirmngr"
+		PACKAGE_LIST_DESKTOP+=" paman libgcr-3-common gcj-jre-headless paprefs dbus-x11"
+		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium system-config-printer-common system-config-printer"
+	;;
+
 	bionic)
-	PACKAGE_LIST_RELEASE="man-db nano zram-config"
-	PACKAGE_LIST_DESKTOP+=" thunderbird firefox"
-	[[ $BUILD_DESKTOP_DE != icewm  ]] && PACKAGE_LIST_DESKTOP+=" language-selector-gnome system-config-printer-common system-config-printer-gnome ubuntu-mate-desktop ubuntu-mate-themes mate-window-menu-applet"
-	[[ $ARCH == armhf ]] && PACKAGE_LIST_DESKTOP+=" mate-utils mate-settings-daemon"
+		PACKAGE_LIST_RELEASE="man-db less kbd net-tools netcat-openbsd gnupg2 dirmngr nano wget"
+		PACKAGE_LIST_DESKTOP+=" xserver-xorg-input-all paprefs dbus-x11"
+		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium-browser system-config-printer-common system-config-printer language-selector-gnome"
 	;;
+
 esac
+
 
 DEBIAN_MIRROR='httpredir.debian.org/debian'
 UBUNTU_MIRROR='ports.ubuntu.com/'
@@ -219,20 +213,11 @@ PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL"
 	#PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/iceweasel/iceweasel:armhf}"
 	#PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/thunderbird/thunderbird:armhf}"
 #fi
-[[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP"
-
-# remove any packages defined in PACKAGE_LIST_RM in lib.config
-#if [[ -n $PACKAGE_LIST_RM ]]; then
-#	PACKAGE_LIST=$(sed -r "s/\b($(tr ' ' '|' <<< $PACKAGE_LIST_RM))\b//g" <<< $PACKAGE_LIST)
-#fi
+[[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP $PACKAGE_LIST_DESKTOP_RECOMMENDS $PACKAGE_LIST_DISPLAY_MANAGER"
 
 # remove any packages defined in PACKAGE_LIST_RM in lib.config
 if [[ -n $PACKAGE_LIST_RM ]]; then
-        SED_TASK=""
-        for PACKAGE_RM in $PACKAGE_LIST_RM; do
-                SED_TASK+="|\s${PACKAGE_RM}\s"
-        done
-        PACKAGE_LIST=$(sed -r "s/${SED_TASK:1}/ /g" <<< " $PACKAGE_LIST ")
+	PACKAGE_LIST=$(sed -r "s/\b($(tr ' ' '|' <<< $PACKAGE_LIST_RM))\b//g" <<< $PACKAGE_LIST)
 fi
 
 # debug

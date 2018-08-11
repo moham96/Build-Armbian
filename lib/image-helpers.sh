@@ -16,7 +16,6 @@
 # write_uboot
 # customize_image
 # install_deb_chroot
-# install_deb_chroot_apt
 
 
 # mount_chroot <target>
@@ -92,7 +91,6 @@ install_external_applications()
 #
 write_uboot()
 {
-if [[ $ADD_UBOOT == yes ]]; then
 	local loop=$1
 	display_alert "Writing U-boot bootloader" "$loop" "info"
 	mkdir -p /tmp/u-boot/
@@ -101,7 +99,6 @@ if [[ $ADD_UBOOT == yes ]]; then
 	[[ $? -ne 0 ]] && exit_with_error "U-boot bootloader failed to install" "@host"
 	rm -r /tmp/u-boot/
 	sync
-fi
 } #############################################################################
 
 customize_image()
@@ -125,16 +122,6 @@ install_deb_chroot()
 	local name=$(basename $package)
 	cp $package $SDCARD/root/$name
 	display_alert "Installing" "$name"
-	chroot $SDCARD /bin/bash -c "dpkg -i /root/$name; apt-get -y -f install" >> $DEST/debug/install.log 2>&1
+	chroot $SDCARD /bin/bash -c "dpkg -i /root/$name" >> $DEST/debug/install.log 2>&1
 	rm -f $SDCARD/root/$name
-} #############################################################################
-
-install_deb_chroot_apt()
-{
-	local package=$1
-	local name=$(basename $package)
-	cp $package $SDCARD/root/$name
-	display_alert "Installing" "$name"
-	chroot $SDCARD /bin/bash -c "apt-get install -y -f /root/$name" >> $DEST/debug/install.log 2>&1
-	rm -f $SDCARD/root/$name
-} #############################################################################
+}

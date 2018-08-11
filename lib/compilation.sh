@@ -39,8 +39,12 @@ compile_atf()
 	local toolchain=$(find_toolchain "$ATF_COMPILER" "$ATF_USE_GCC")
 	[[ -z $toolchain ]] && exit_with_error "Could not find required toolchain" "${ATF_COMPILER}gcc $ATF_USE_GCC"
 
-	local toolchain_extra=$(find_toolchain "arm-linux-gnueabi-" "> 5.0")
-	[[ -z $toolchain_extra ]] && exit_with_error "Could not find required toolchain" "arm-linux-gnueabi- > 5.0"
+	if [[ -n $ATF_TOOLCHAIN2 ]]; then
+		local toolchain2_type=$(cut -d':' -f1 <<< $ATF_TOOLCHAIN2)
+		local toolchain2_ver=$(cut -d':' -f2 <<< $ATF_TOOLCHAIN2)
+		local toolchain2=$(find_toolchain "$toolchain2_type" "$toolchain2_ver")
+		[[ -z $toolchain2 ]] && exit_with_error "Could not find required toolchain" "${toolchain2_type}gcc $toolchain2_ver"
+	fi
 
 	display_alert "Compiler version" "${ATF_COMPILER}gcc $(eval env PATH=$toolchain:$PATH ${ATF_COMPILER}gcc -dumpversion)" "info"
 
@@ -53,7 +57,7 @@ compile_atf()
 	# create patch for manual source changes
 	[[ $CREATE_PATCHES == yes ]] && userpatch_create "atf"
 
-	eval CCACHE_BASEDIR="$(pwd)" env PATH=$toolchain:$toolchain_extra:$PATH \
+	eval CCACHE_BASEDIR="$(pwd)" env PATH=$toolchain:$toolchain2:$PATH \
 		'make $target_make $CTHREADS CROSS_COMPILE="$CCACHE $ATF_COMPILER"' 2>&1 \
 		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
 		${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Compiling ATF..." $TTY_Y $TTY_X'} \
@@ -84,8 +88,6 @@ compile_atf()
 
 compile_uboot()
 {
-if [[ $ADD_UBOOT == yes ]]; then
-
 	# not optimal, but extra cleaning before overlayfs_wrapper should keep sources directory clean
 	if [[ $CLEAN_LEVEL == *make* ]]; then
 		display_alert "Cleaning" "$BOOTSOURCEDIR" "info"
@@ -146,7 +148,8 @@ if [[ $ADD_UBOOT == yes ]]; then
 		# armbian specifics u-boot settings
 		[[ -f .config ]] && sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-armbian"/g' .config
 		[[ -f .config ]] && sed -i 's/CONFIG_LOCALVERSION_AUTO=.*/# CONFIG_LOCALVERSION_AUTO is not set/g' .config
-		if [[ $BOOTBRANCH == 'tag:v2018.03' ]]; then
+		if [[ $BOOTBRANCH == "tag:v2018".* ]]; then
+			[[ -f .config ]] && sed -i 's/^.*CONFIG_ENV_IS_IN_FAT.*/# CONFIG_ENV_IS_IN_FAT is not set/g' .config
 			[[ -f .config ]] && sed -i 's/^.*CONFIG_ENV_IS_IN_EXT4.*/CONFIG_ENV_IS_IN_EXT4=y/g' .config
 			[[ -f .config ]] && sed -i 's/^.*CONFIG_ENV_IS_IN_MMC.*/# CONFIG_ENV_IS_IN_MMC is not set/g' .config
 			[[ -f .config ]] && sed -i 's/^.*CONFIG_ENV_IS_NOWHERE.*/# CONFIG_ENV_IS_NOWHERE is not set/g' .config | echo "# CONFIG_ENV_IS_NOWHERE is not set" >> .config
@@ -189,7 +192,12 @@ if [[ $ADD_UBOOT == yes ]]; then
 	#!/bin/bash
 	source /usr/lib/u-boot/platform_install.sh
 	[[ \$DEVICE == /dev/null ]] && exit 0
-	[[ -z \$DEVICE ]] && DEVICE="/dev/mmcblk0"
+	if [[ -z \$DEVICE ]]; then
+		DEVICE="/dev/mmcblk0"
+		# proceed to other options.
+		[ ! -b \$DEVICE ] && DEVICE="/dev/mmcblk1"
+		[ ! -b \$DEVICE ] && DEVICE="/dev/mmcblk2"
+	fi
 	[[ \$(type -t setup_write_uboot_platform) == function ]] && setup_write_uboot_platform
 	if [[ -b \$DEVICE ]]; then
 		echo "Updating u-boot on \$DEVICE" >&2
@@ -240,8 +248,6 @@ if [[ $ADD_UBOOT == yes ]]; then
 	[[ ! -f $SRC/.tmp/${uboot_name}.deb ]] && exit_with_error "Building u-boot package failed"
 
 	mv $SRC/.tmp/${uboot_name}.deb $DEST/debs/
-
-fi
 }
 
 compile_kernel()
@@ -280,13 +286,13 @@ compile_kernel()
 	rm -rf ${sources_pkg_dir}
 	mkdir -p $sources_pkg_dir/usr/src/ $sources_pkg_dir/usr/share/doc/linux-source-${version}-${LINUXFAMILY} $sources_pkg_dir/DEBIAN
 
-###### 20171019 ToDO add var CREATE_DEB_LINUX_SOURCE
-#	display_alert "Compressing sources for the linux-source package"
-#	tar cp --directory="$kerneldir" --exclude='./.git/' --owner=root . \
-#		 | pv -p -b -r -s $(du -sb "$kerneldir" --exclude=='./.git/' | cut -f1) \
-#		| pixz -4 > $sources_pkg_dir/usr/src/linux-source-${version}-${LINUXFAMILY}.tar.xz
-#	cp COPYING $sources_pkg_dir/usr/share/doc/linux-source-${version}-${LINUXFAMILY}/LICENSE
-###### 20171019
+	if [[ $BUILD_KSRC != no ]]; then
+		display_alert "Compressing sources for the linux-source package"
+		tar cp --directory="$kerneldir" --exclude='./.git/' --owner=root . \
+			 | pv -p -b -r -s $(du -sb "$kerneldir" --exclude=='./.git/' | cut -f1) \
+			| pixz -4 > $sources_pkg_dir/usr/src/linux-source-${version}-${LINUXFAMILY}.tar.xz
+		cp COPYING $sources_pkg_dir/usr/share/doc/linux-source-${version}-${LINUXFAMILY}/LICENSE
+	fi
 
 	# create patch for manual source changes in debug mode
 	[[ $CREATE_PATCHES == yes ]] && userpatch_create "kernel"
@@ -307,7 +313,7 @@ compile_kernel()
 			display_alert "Using kernel config provided by user" "userpatches/$LINUXCONFIG.config" "info"
 			cp $SRC/userpatches/$LINUXCONFIG.config .config
 		else
-			display_alert "Using kernel config file" "lib/config/kernel/$LINUXCONFIG.config" "info"
+			display_alert "Using kernel config file" "config/kernel/$LINUXCONFIG.config" "info"
 			cp $SRC/config/kernel/$LINUXCONFIG.config .config
 		fi
 	fi
@@ -320,9 +326,6 @@ compile_kernel()
 
 	# hack for deb builder. To pack what's missing in headers pack.
 	cp $SRC/patch/misc/headers-debian-byteshift.patch /tmp
-
-	export LOCAL_VERSION="-$LINUXFAMILY"
-	export LOCAL_KERNEL_VERSION="$version"
 
 	if [[ $KERNEL_CONFIGURE != yes ]]; then
 		if [[ $BRANCH == default ]]; then
@@ -339,7 +342,7 @@ compile_kernel()
 		eval CCACHE_BASEDIR="$(pwd)" env PATH=$toolchain:$PATH \
 			'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" ${KERNEL_MENUCONFIG:-menuconfig}'
 		# store kernel config in easily reachable place
-		display_alert "Exporting new kernel config" "$DEST/$LINUXCONFIG.config" "info"
+		display_alert "Exporting new kernel config" "$DEST/kernel/$LINUXCONFIG.config" "info"
 		cp .config $DEST/config/$LINUXCONFIG.config
 		# export defconfig too if requested
 		if [[ $KERNEL_EXPORT_DEFCONFIG == yes ]]; then
@@ -352,7 +355,7 @@ compile_kernel()
 	xz < .config > $sources_pkg_dir/usr/src/${LINUXCONFIG}_${version}_${REVISION}_config.xz
 
 	eval CCACHE_BASEDIR="$(pwd)" env PATH=$toolchain:$PATH \
-		'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" $SRC_LOADADDR LOCALVERSION="-$LINUXFAMILY" \
+		'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" LOCALVERSION="-$LINUXFAMILY" \
 		$KERNEL_IMAGE_TYPE modules dtbs 2>&1' \
 		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
 		${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Compiling kernel..." $TTY_Y $TTY_X'} \

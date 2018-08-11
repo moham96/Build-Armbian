@@ -22,9 +22,6 @@ umask 002
 # destination
 DEST=$SRC/output
 
-# SOURCES add 20170101
-SOURCES=$SRC/cache/sources
-
 TTY_X=$(($(stty size | awk '{print $2}')-6)) # determine terminal width
 TTY_Y=$(($(stty size | awk '{print $1}')-6)) # determine terminal height
 
@@ -43,8 +40,7 @@ backtitle="Armbian building script, http://www.armbian.com | Author: Igor Pecovn
 source $SRC/lib/debootstrap-ng.sh 			# System specific install
 source $SRC/lib/image-helpers.sh			# helpers for OS image building
 source $SRC/lib/distributions.sh 			# System specific install
-source $SRC/lib/desktop.sh 				# Desktop specific install
-source $SRC/lib/desktop-ng.sh 				# Desktop package creation
+source $SRC/lib/desktop.sh 					# Desktop specific install
 source $SRC/lib/compilation.sh 				# Patching and compilation of kernel, uboot, ATF
 source $SRC/lib/makeboarddeb.sh 			# Create board support package
 source $SRC/lib/general.sh				# General functions
@@ -57,16 +53,6 @@ rm -f $DEST/debug/*.log > /dev/null 2>&1
 date +"%d_%m_%Y-%H_%M_%S" > $DEST/debug/timestamp
 # delete compressed logs older than 7 days
 (cd $DEST/debug && find . -name '*.tgz' -mtime +7 -delete) > /dev/null
-
-# Script parameters handling
-for i in "$@"; do
-	if [[ $i == *=* ]]; then
-		parameter=${i%%=*}
-		value=${i##*=}
-		display_alert "Command line: setting $parameter to" "${value:-(empty)}" "info"
-		eval $parameter=$value
-	fi
-done
 
 if [[ $PROGRESS_DISPLAY == none ]]; then
 	OUTPUT_VERYSILENT=yes
@@ -207,10 +193,10 @@ fi
 
 if [[ $KERNEL_ONLY != yes && -z $RELEASE ]]; then
 	options=()
-#	options+=("jessie" "Debian 8 Jessie")
+	options+=("jessie" "Debian 8 Jessie")
 	options+=("stretch" "Debian 9 Stretch")
-#	options+=("xenial" "Ubuntu Xenial 16.04 LTS")
-	options+=("bionic" "Ubuntu Bionic 18.04 LTS")
+	options+=("xenial" "Ubuntu Xenial 16.04 LTS")
+	[[ $EXPERT = yes ]] && options+=("bionic" "Ubuntu Bionic 18.04 LTS")
 	RELEASE=$(dialog --stdout --title "Choose a release" --backtitle "$backtitle" --menu "Select the target OS release" \
 		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
 	unset options
@@ -223,21 +209,8 @@ if [[ $KERNEL_ONLY != yes && -z $BUILD_DESKTOP ]]; then
 	options+=("yes" "Image with desktop environment")
 	BUILD_DESKTOP=$(dialog --stdout --title "Choose image type" --backtitle "$backtitle" --no-tags --menu "Select the target image type" \
 		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
-	[[ $BUILD_DESKTOP = no ]] && BUILD_DESKTOP_DE="server"
 	unset options
 	[[ -z $BUILD_DESKTOP ]] && exit_with_error "No option selected"
-fi
-
-# options DE
-if [[ $KERNEL_ONLY != yes && $BUILD_DESKTOP = yes && -z $BUILD_DESKTOP_DE ]]; then
-	options=()
-	options+=("xfce" "Image with desktop XFCE")
-	options+=("mate" "Image with desktop MATE")
-	options+=("icewm" "Image with desktop IceWM")
-	BUILD_DESKTOP_DE=$(dialog --stdout --title "Choose DE type" --backtitle "$backtitle" --no-tags --menu "Select the DE for target image" \
-		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
-	unset options
-	[[ -z $BUILD_DESKTOP_DE ]] && exit_with_error "No option selected"
 fi
 
 source $SRC/lib/configuration.sh
@@ -258,9 +231,7 @@ start=`date +%s`
 # fetch_from_repo <url> <dir> <ref> <subdir_flag>
 if [[ $IGNORE_UPDATES != yes ]]; then
 	display_alert "Downloading sources" "" "info"
-	if [[ $ADD_UBOOT == yes ]]; then
-		fetch_from_repo "$BOOTSOURCE" "$BOOTDIR" "$BOOTBRANCH" "yes"
-	fi
+	fetch_from_repo "$BOOTSOURCE" "$BOOTDIR" "$BOOTBRANCH" "yes"
 	fetch_from_repo "$KERNELSOURCE" "$KERNELDIR" "$KERNELBRANCH" "yes"
 	if [[ -n $ATFSOURCE ]]; then
 		fetch_from_repo "$ATFSOURCE" "$ATFDIR" "$ATFBRANCH" "yes"
@@ -293,7 +264,7 @@ DEB_BRANCH=${DEB_BRANCH:+${DEB_BRANCH}-}
 CHOSEN_UBOOT=linux-u-boot-${DEB_BRANCH}${BOARD}
 CHOSEN_KERNEL=linux-image-${DEB_BRANCH}${LINUXFAMILY}
 CHOSEN_ROOTFS=linux-${RELEASE}-root-${DEB_BRANCH}${BOARD}
-CHOSEN_DESKTOP=armbian-${RELEASE}-desktop-${BUILD_DESKTOP_DE}
+CHOSEN_DESKTOP=armbian-${RELEASE}-desktop
 CHOSEN_KSRC=linux-source-${BRANCH}-${LINUXFAMILY}
 
 for option in $(tr ',' ' ' <<< "$CLEAN_LEVEL"); do
@@ -323,9 +294,7 @@ VER="${VER/-$LINUXFAMILY/}"
 [[ -n $RELEASE && ! -f $DEST/debs/$RELEASE/${CHOSEN_ROOTFS}_${REVISION}_${ARCH}.deb ]] && create_board_package
 
 # create desktop package
-if [[ $KERNEL_ONLY != yes && $BUILD_DESKTOP = yes ]]; then
-    [[ -n $RELEASE && ! -f $DEST/debs/$RELEASE/${CHOSEN_DESKTOP}_${REVISION}_all.deb ]] && create_desktop_package
-fi
+[[ -n $RELEASE && ! -f $DEST/debs/$RELEASE/${CHOSEN_DESKTOP}_${REVISION}_all.deb ]] && create_desktop_package
 
 # build additional packages
 [[ $EXTERNAL_NEW == compile ]] && chroot_build_packages
