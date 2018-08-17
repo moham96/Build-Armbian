@@ -132,9 +132,7 @@ rm $DIR_INSTALL/etc/fstab
 cp -a /root/fstab4 $DIR_INSTALL/etc/fstab
 
 rm $DIR_INSTALL/root/install.sh
-rm $DIR_INSTALL/root/install4.sh
 rm $DIR_INSTALL/root/fstab
-rm $DIR_INSTALL/root/fstab4
 rm $DIR_INSTALL/usr/bin/ddbr
 rm $DIR_INSTALL/usr/bin/ddbr_backup_nand
 rm $DIR_INSTALL/usr/bin/ddbr_backup_nand_full
