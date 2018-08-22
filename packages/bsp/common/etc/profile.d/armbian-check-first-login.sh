@@ -124,7 +124,7 @@ if [ -f /root/.not_logged_in_yet ] && [ -n "$BASH_VERSION" ] && [ "$-" != "${-#*
 			service nodm start
 		fi
 	elif [ "$DESKTOPDETECT" = lightdm ] && [ -n "$RealName" ] ; then
-		ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+			ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
 		if [[ -f /var/run/resize2fs-reboot ]]; then
 			# Let the user reboot now otherwise start desktop environment
 			printf "\n\n\e[0;91mWarning: a reboot is needed to finish resizing the filesystem \x1B[0m \n"
@@ -143,8 +143,4 @@ if [ -f /root/.not_logged_in_yet ] && [ -n "$BASH_VERSION" ] && [ "$-" != "${-#*
 			printf "\e[0;91mPlease reboot the system now \x1B[0m \n\n"
 		fi
 	fi
-#	sync
-#	echo -e "Sucesfuul setup. Reboot system.\n"
-#	sleep 3
-#	reboot
 fi

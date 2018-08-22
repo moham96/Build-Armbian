@@ -10,10 +10,10 @@
 # common options
 # daily beta build contains date in subrevision
 if [[ $BETA == yes && -z $SUBREVISION ]]; then SUBREVISION="."$(date --date="tomorrow" +"%y%m%d"); fi
-REVISION="5.55$SUBREVISION" # all boards have same revision
+REVISION="5.59$SUBREVISION" # all boards have same revision
 ROOTPWD="1234" # Must be changed @first login
-MAINTAINER="Igor Pecovnik" # deb signature
-MAINTAINERMAIL="igor.pecovnik@****l.com" # deb signature
+MAINTAINER="Oleg Ivanov" # deb signature
+MAINTAINERMAIL="balbes-150@yandex.ru" # deb signature
 TZDATA=`cat /etc/timezone` # Timezone for target is taken from host or defined here.
 USEALLCORES=yes # Use all CPU cores for compiling
 EXIT_PATCHING_ERROR="" # exit patching if failed
@@ -213,7 +213,8 @@ PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL"
 	#PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/iceweasel/iceweasel:armhf}"
 	#PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/thunderbird/thunderbird:armhf}"
 #fi
-[[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP $PACKAGE_LIST_DESKTOP_RECOMMENDS $PACKAGE_LIST_DISPLAY_MANAGER"
+[[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP $PACKAGE_LIST_DESKTOP_RECOMMENDS"
+### $PACKAGE_LIST_DISPLAY_MANAGER"
 
 # remove any packages defined in PACKAGE_LIST_RM in lib.config
 if [[ -n $PACKAGE_LIST_RM ]]; then
